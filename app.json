@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Geise.arq - Obra",
+    "slug": "geisearq-obra",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F4F0EC"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.geisearq.obras"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F4F0EC"
+      },
+      "package": "com.geisearq.obras",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Necessário para anexar fotos à visita técnica.",
+          "cameraPermission": "Necessário para fotografar a obra."
+        }
+      ]
+    ],
+    "scheme": "geise-obras",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6e06b9c9-807d-48ce-9e54-b0718abef6cd"
+      }
+    },
+    "owner": "dscostafelipes-organization"
+  }
+}
