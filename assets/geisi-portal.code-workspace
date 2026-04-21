@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../../geisi-portal"
+		},
+		{
+			"path": "../../geisi.arq"
+		},
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "geisi-portal"
+	}
+}

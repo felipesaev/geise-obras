@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { Feather } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import * as FileSystem from 'expo-file-system'
 import { supabase } from '../../../lib/supabase'
 
 interface FotoLocal {
@@ -21,52 +20,49 @@ export default function NovaVisita() {
   const insets = useSafeAreaInsets()
 
   const [dataVisita, setDataVisita] = useState(new Date().toISOString().split('T')[0])
-  const [localObra, setLocalObra] = useState('')
-  const [clienteNome, setClienteNome] = useState('')
   const [fotos, setFotos] = useState<FotoLocal[]>([])
   const [resumo, setResumo] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploadingFoto, setUploadingFoto] = useState(false)
 
   const pickImage = async (source: 'camera' | 'gallery') => {
-    let result: ImagePicker.ImagePickerResult
+    try {
+      let result: ImagePicker.ImagePickerResult
 
-    if (source === 'camera') {
-      const perm = await ImagePicker.requestCameraPermissionsAsync()
-      if (!perm.granted) {
-        Alert.alert('Permissão necessária', 'Permita o acesso à câmera nas configurações.')
-        return
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync()
+        if (!perm.granted) {
+          Alert.alert('Permissão necessária', 'Permita o acesso à câmera nas configurações.')
+          return
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'] as any,
+          quality: 0.8,
+        })
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+        if (!perm.granted) {
+          Alert.alert('Permissão necessária', 'Permita o acesso à galeria nas configurações.')
+          return
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'] as any,
+          allowsMultipleSelection: true,
+          quality: 0.8,
+          selectionLimit: 20,
+        })
       }
-      result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'] as any,
-        quality: 0.8,
-      })
-    } else {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!perm.granted) {
-        Alert.alert('Permissão necessária', 'Permita o acesso à galeria nas configurações.')
-        return
-      }
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'] as any,
-        allowsMultipleSelection: true,
-        quality: 0.8,
-        selectionLimit: 20,
-      })
-    }
 
-    if (!result.canceled) {
-      const novas = result.assets.map(a => ({ uri: a.uri, descricao: '' }))
-      setFotos(prev => [...prev, ...novas])
+      if (!result.canceled) {
+        const novas = result.assets.map(a => ({ uri: a.uri, descricao: '' }))
+        setFotos(prev => [...prev, ...novas])
+      }
+    } catch (e: any) {
+      Alert.alert('Erro', 'Não foi possível abrir a câmera/galeria.')
     }
   }
 
   const uploadFotos = async (): Promise<{ item: number; foto_url: string; descricao: string; ok: boolean }[]> => {
-    const { data: { session } } = await supabase.auth.getSession()
-    const token = session?.access_token ?? ''
-    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
-    const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
-
     const resultado = []
     for (let i = 0; i < fotos.length; i++) {
       const { uri, descricao } = fotos[i]
@@ -75,26 +71,18 @@ export default function NovaVisita() {
         const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`
         const fileName = `${obra_id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
 
-        const uploadResult = await FileSystem.uploadAsync(
-          `${supabaseUrl}/storage/v1/object/obra-fotos/${fileName}`,
-          uri,
-          {
-            httpMethod: 'POST',
-            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-            mimeType: mime,
-            headers: {
-              Authorization: `Bearer ${token}`,
-              apikey: supabaseKey,
-              'Content-Type': mime,
-            },
-          }
-        )
+        const fileResponse = await fetch(uri)
+        const blob = await fileResponse.blob()
 
-        if (uploadResult.status === 200 || uploadResult.status === 201) {
+        const { error } = await supabase.storage
+          .from('obra-fotos')
+          .upload(fileName, blob, { contentType: mime, upsert: false })
+
+        if (!error) {
           const { data: { publicUrl } } = supabase.storage.from('obra-fotos').getPublicUrl(fileName)
           resultado.push({ item: i + 1, foto_url: publicUrl, descricao: descricao.trim(), ok: true })
         } else {
-          console.warn('Upload falhou:', uploadResult.status, uploadResult.body)
+          console.warn('Upload falhou:', error.message)
         }
       } catch (e: any) {
         console.warn('Erro ao enviar foto:', e?.message)
@@ -106,52 +94,56 @@ export default function NovaVisita() {
   const handleSalvar = async () => {
     setSaving(true)
 
-    const [obraRes, countRes] = await Promise.all([
-      supabase.from('obras').select('escritorio_id').eq('id', obra_id).single(),
-      supabase.from('visitas_tecnicas').select('numero').eq('obra_id', obra_id).order('numero', { ascending: false }).limit(1),
-    ])
+    try {
+      const [obraRes, countRes] = await Promise.all([
+        supabase.from('obras').select('escritorio_id').eq('id', obra_id).single(),
+        supabase.from('visitas_tecnicas').select('numero').eq('obra_id', obra_id).order('numero', { ascending: false }).limit(1),
+      ])
 
-    if (obraRes.error || !obraRes.data) {
+      if (obraRes.error || !obraRes.data) {
+        Alert.alert('Erro', 'Não foi possível carregar a obra.')
+        return
+      }
+
+      const escritorio_id = obraRes.data.escritorio_id
+      const numero = (countRes.data?.[0]?.numero ?? 0) + 1
+
+      let fotosUpload: { item: number; foto_url: string; descricao: string; ok: boolean }[] = []
+      if (fotos.length > 0) {
+        setUploadingFoto(true)
+        fotosUpload = await uploadFotos()
+        setUploadingFoto(false)
+      }
+
+      const anotacoesJson = resumo.trim()
+        ? [{ item: 1, tipo_servico: 'Resumo', fornecedor: '', anotacoes: resumo.trim() }]
+        : []
+
+      const { error } = await supabase.from('visitas_tecnicas').insert({
+        obra_id,
+        escritorio_id,
+        numero,
+        data_visita: dataVisita,
+        local_obra: null,
+        cliente_nome: null,
+        etapas: [],
+        anotacoes: anotacoesJson,
+        fotos: fotosUpload,
+      })
+
+      if (error) {
+        console.warn('Erro ao salvar visita:', JSON.stringify(error))
+        Alert.alert('Erro', error.message || 'Não foi possível salvar a visita.')
+        return
+      }
+
+      router.back()
+    } catch (e: any) {
+      Alert.alert('Erro', 'Ocorreu um erro inesperado. Tente novamente.')
+    } finally {
       setSaving(false)
-      Alert.alert('Erro', 'Não foi possível carregar a obra.')
-      return
-    }
-
-    const escritorio_id = obraRes.data.escritorio_id
-    const numero = (countRes.data?.[0]?.numero ?? 0) + 1
-
-    let fotosUpload: { item: number; foto_url: string; descricao: string; ok: boolean }[] = []
-    if (fotos.length > 0) {
-      setUploadingFoto(true)
-      fotosUpload = await uploadFotos()
       setUploadingFoto(false)
     }
-
-    const anotacoesJson = resumo.trim()
-      ? [{ item: 1, tipo_servico: 'Resumo', fornecedor: '', anotacoes: resumo.trim() }]
-      : []
-
-    const { error } = await supabase.from('visitas_tecnicas').insert({
-      obra_id,
-      escritorio_id,
-      numero,
-      data_visita: dataVisita,
-      local_obra: localObra.trim() || null,
-      cliente_nome: clienteNome.trim() || null,
-      etapas: [],
-      anotacoes: anotacoesJson,
-      fotos: fotosUpload,
-    })
-
-    setSaving(false)
-
-    if (error) {
-      console.warn('Erro ao salvar visita:', JSON.stringify(error))
-      Alert.alert('Erro', error.message || 'Não foi possível salvar a visita.')
-      return
-    }
-
-    router.back()
   }
 
   return (
@@ -191,27 +183,6 @@ export default function NovaVisita() {
             />
           </View>
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Local / Endereço</Text>
-            <TextInput
-              style={styles.input}
-              value={localObra}
-              onChangeText={setLocalObra}
-              placeholder="Endereço ou referência (opcional)"
-              placeholderTextColor="#c0b8b0"
-            />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Cliente</Text>
-            <TextInput
-              style={styles.input}
-              value={clienteNome}
-              onChangeText={setClienteNome}
-              placeholder="Nome do cliente (opcional)"
-              placeholderTextColor="#c0b8b0"
-            />
-          </View>
         </View>
 
         {/* Fotos */}

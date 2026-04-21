@@ -30,45 +30,53 @@ export default function NovoDiario() {
   const [saving, setSaving] = useState(false)
 
   const pickImage = async (source: 'camera' | 'gallery') => {
-    let result: ImagePicker.ImagePickerResult
+    try {
+      let result: ImagePicker.ImagePickerResult
 
-    if (source === 'camera') {
-      const perm = await ImagePicker.requestCameraPermissionsAsync()
-      if (!perm.granted) {
-        Alert.alert('Permissão necessária', 'Permita o acesso à câmera nas configurações.')
-        return
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync()
+        if (!perm.granted) {
+          Alert.alert('Permissão necessária', 'Permita o acesso à câmera nas configurações.')
+          return
+        }
+        result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'] as any, quality: 0.8 })
+      } else {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+        if (!perm.granted) {
+          Alert.alert('Permissão necessária', 'Permita o acesso à galeria nas configurações.')
+          return
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'] as any,
+          allowsMultipleSelection: true,
+          quality: 0.8,
+          selectionLimit: 10,
+        })
       }
-      result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'] as any, quality: 0.8 })
-    } else {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (!perm.granted) {
-        Alert.alert('Permissão necessária', 'Permita o acesso à galeria nas configurações.')
-        return
-      }
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'] as any,
-        allowsMultipleSelection: true,
-        quality: 0.8,
-        selectionLimit: 10,
-      })
-    }
 
-    if (!result.canceled) {
-      setFotos(prev => [...prev, ...result.assets.map(a => a.uri)])
+      if (!result.canceled) {
+        setFotos(prev => [...prev, ...result.assets.map(a => a.uri)])
+      }
+    } catch (e: any) {
+      Alert.alert('Erro', 'Não foi possível abrir a câmera/galeria.')
     }
   }
 
   const uploadFotos = async (): Promise<string[]> => {
     const urls: string[] = []
     for (const uri of fotos) {
-      const ext = uri.split('.').pop() ?? 'jpg'
-      const fileName = `diario/${obra_id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
-      const response = await fetch(uri)
-      const blob = await response.blob()
-      const { data: up, error } = await supabase.storage.from('obra-fotos').upload(fileName, blob, { contentType: `image/${ext}` })
-      if (!error && up) {
-        const { data: { publicUrl } } = supabase.storage.from('obra-fotos').getPublicUrl(up.path)
-        urls.push(publicUrl)
+      try {
+        const ext = uri.split('.').pop() ?? 'jpg'
+        const fileName = `diario/${obra_id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
+        const response = await fetch(uri)
+        const blob = await response.blob()
+        const { data: up, error } = await supabase.storage.from('obra-fotos').upload(fileName, blob, { contentType: `image/${ext}` })
+        if (!error && up) {
+          const { data: { publicUrl } } = supabase.storage.from('obra-fotos').getPublicUrl(up.path)
+          urls.push(publicUrl)
+        }
+      } catch (e: any) {
+        console.warn('Erro ao enviar foto:', e?.message)
       }
     }
     return urls
@@ -82,27 +90,31 @@ export default function NovoDiario() {
 
     setSaving(true)
 
-    let fotosUrls: string[] = []
-    if (fotos.length > 0) fotosUrls = await uploadFotos()
+    try {
+      let fotosUrls: string[] = []
+      if (fotos.length > 0) fotosUrls = await uploadFotos()
 
-    const { error } = await supabase.from('diario_obra').insert({
-      obra_id,
-      data_registro: dataRegistro,
-      clima,
-      atividades_realizadas: atividadesRealizadas.trim(),
-      ocorrencias: ocorrencias.trim() || null,
-      num_funcionarios: numFuncionarios ? parseInt(numFuncionarios) : 0,
-      fotos_urls: fotosUrls,
-    })
+      const { error } = await supabase.from('diario_obra').insert({
+        obra_id,
+        data_registro: dataRegistro,
+        clima,
+        atividades_realizadas: atividadesRealizadas.trim(),
+        ocorrencias: ocorrencias.trim() || null,
+        num_funcionarios: numFuncionarios ? parseInt(numFuncionarios) : 0,
+        fotos_urls: fotosUrls,
+      })
 
-    setSaving(false)
+      if (error) {
+        Alert.alert('Erro', 'Não foi possível salvar o registro. Tente novamente.')
+        return
+      }
 
-    if (error) {
-      Alert.alert('Erro', 'Não foi possível salvar o registro. Tente novamente.')
-      return
+      router.back()
+    } catch (e: any) {
+      Alert.alert('Erro', 'Ocorreu um erro inesperado. Tente novamente.')
+    } finally {
+      setSaving(false)
     }
-
-    router.back()
   }
 
   return (
