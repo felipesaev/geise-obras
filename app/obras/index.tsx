@@ -116,9 +116,12 @@ export default function Obras() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
-        <TouchableOpacity onPress={signOut} style={styles.sairBtn}>
-          <Feather name="log-out" size={18} color="#c0b8b0" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <Text style={styles.versaoText}>v1.1.0</Text>
+          <TouchableOpacity onPress={signOut} style={styles.sairBtn}>
+            <Feather name="log-out" size={18} color="#c0b8b0" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -205,6 +208,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   logo: { width: 110, height: 34 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  versaoText: { fontSize: 11, color: '#c0b8b0', fontWeight: '500' },
   sairBtn: { padding: 4 },
 
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4, marginBottom: 16 },
